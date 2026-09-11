@@ -113,14 +113,17 @@ class MockDataService {
   }
 
   async submitAssessment(sessionId, score) {
-    await this.delay(500);
-    const sessions = this._get('mock_sessions');
-    const idx = sessions.findIndex(s => s.id === sessionId);
-    if (idx > -1) {
-      sessions[idx].status = 'completed';
-      sessions[idx].score = score;
-      this._set('mock_sessions', sessions);
-    }
+    const { error } = await supabase
+        .from('sessions')
+        .update({ 
+            score: score, 
+            is_completed: true, 
+            submitted_at: new Date().toISOString() 
+        })
+        .eq('id', sessionId);
+
+    if (error) throw error;
+}
   }
 }
 
