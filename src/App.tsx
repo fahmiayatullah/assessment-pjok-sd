@@ -94,35 +94,38 @@ class MockDataService {
     this._set('mock_sessions', [newSession, ...sessions]);
     return newSession;
   }
-
-  async getSessions(assessmentId) {
-    await this.delay(300);
-    return this._get('mock_sessions').filter(s => s.assessment_id === assessmentId);
+async getSessions(assessmentId) {
+    const { data, error } = await supabase
+      .from('sessions')
+      .select('*')
+      .eq('assessment_id', assessmentId);
+    if (error) throw error;
+    return data || [];
   }
 
   async saveAnswer(sessionId, questionId, selectedOption) {
-    await this.delay(100);
-    const answers = this._get('mock_answers');
-    const existingIdx = answers.findIndex(a => a.session_id === sessionId && a.question_id === questionId);
-    if (existingIdx > -1) {
-      answers[existingIdx].selected_option = selectedOption;
-    } else {
-      answers.push({ id: this._uuid(), session_id: sessionId, question_id: questionId, selected_option: selectedOption });
-    }
-    this._set('mock_answers', answers);
+    const { error } = await supabase
+      .from('answers')
+      .upsert({ 
+        session_id: sessionId, 
+        question_id: questionId, 
+        selected_option: selectedOption 
+      }, { onConflict: 'session_id,question_id' });
+    if (error) throw error;
   }
 
   async submitAssessment(sessionId, score) {
-    await this.delay(500);
-    const sessions = this._get('assassmentId');
-    const idx = sessions.findIndex(s => s.id === sessionId);
-    if (idx > -1) {
-      sessions[idx].status = 'completed';
-      sessions[idx].score = score;
-      this._set('assassment_id', sessions);
-    }
+    const { error } = await supabase
+      .from('sessions')
+      .update({ 
+        score: score, 
+        is_completed: true, 
+        status: 'completed',
+        submitted_at: new Date().toISOString() 
+      })
+      .eq('id', sessionId);
+    if (error) throw error;
   }
-}
 
 class SupabaseDataService {
   constructor(config) {
