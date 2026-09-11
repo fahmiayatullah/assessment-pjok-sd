@@ -18,7 +18,7 @@ const getStoredConfig = () => {
       isDemo: localStorage.getItem('pjok_demo_mode') === 'true'
     };
   } catch (e) {
-    return { url: '', key: '', isDemo: true };
+    return { url: 'https://okrppilifbgfugldegku.supabase.co', key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rcnBwaWxpZmJnZnVnbGRlZ2t1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTEwMDAsImV4cCI6MjEwNDYyNzAwMH0.uK0o2isiNjh-9TWTfyNriwCKRJguanNqz1XiERzgfno', isDemo: false };
   }
 };
 
