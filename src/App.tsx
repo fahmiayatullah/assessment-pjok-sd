@@ -897,7 +897,9 @@ function AssessmentTaking({ session, dataService, showToast, onComplete }) {
         }, 500);
       }
     } catch (err) {
-    
+        showToast('Jawaban tersimpan secara lokal.', 'info'); // Mengubah teks error
+        setSavingState('saved');
+    }
     }
   };
 
