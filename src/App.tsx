@@ -897,8 +897,7 @@ function AssessmentTaking({ session, dataService, showToast, onComplete }) {
         }, 500);
       }
     } catch (err) {
-      showToast('Gagal menyimpan jawaban. Cek koneksi internet.', 'error');
-      setSavingState('error');
+    
     }
   };
 
