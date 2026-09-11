@@ -895,6 +895,10 @@ function AssessmentTaking({ session, dataService, showToast, onComplete }) {
         setTimeout(() => {
            showToast('Semua soal telah dijawab. Anda dapat menekan tombol Kumpul jika sudah yakin.', 'success');
         }, 500);
+      }
+    } catch (err) {
+      showToast('Gagal menyimpan jawaban. Cek koneksi internet.', 'error');
+      setSavingState('error');
     }
   };
 
