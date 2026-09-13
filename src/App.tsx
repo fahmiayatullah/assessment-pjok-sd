@@ -167,8 +167,8 @@ function TeacherCreateAssessment({ dataService, showToast, onSuccess }) {
       await dataService.createAssessment(title, description, questions);
       showToast('Assessment berhasil disimpan!', 'success');
       onSuccess();
-    } catch (err) {
-      showToast(err.message, 'error');
+    } catch (err: any) {
+      showToast(err?.message || 'Gagal menyimpan assessment', 'error');
     } finally {
       setLoading(false);
     }
@@ -329,8 +329,8 @@ function TeacherResults({ dataService, showToast }) {
     try {
       const data = await dataService.getAssessments();
       setAssessments(data);
-    } catch (err) {
-      showToast('Gagal memuat data ujian', 'error');
+    } catch (err: any) {
+      showToast(err?.message || 'Gagal memuat data ujian', 'error');
     } finally { setLoading(false); }
   };
 
@@ -344,8 +344,8 @@ function TeacherResults({ dataService, showToast }) {
       ]);
       setTokens(tList);
       setSessions(sList);
-    } catch (err) {
-      showToast('Gagal memuat sesi & token', 'error');
+    } catch (err: any) {
+      showToast(err?.message || 'Gagal memuat sesi & token', 'error');
     } finally { setLoading(false); }
   };
 
@@ -355,7 +355,7 @@ function TeacherResults({ dataService, showToast }) {
       const newT = await dataService.createToken(selectedAss.id);
       setTokens([newT, ...tokens]);
       showToast('Token baru berhasil dibuat!', 'success');
-    } catch (err) { showToast('Gagal membuat token', 'error'); }
+    } catch (err: any) { showToast(err?.message || 'Gagal membuat token', 'error'); }
   };
 
   const copyLink = (token) => {
@@ -526,8 +526,8 @@ function StudentPortal({ dataService, showToast }) {
       const res = await dataService.getAssessmentByToken(tokenInput.trim().toUpperCase());
       setSession(res); // { token, assessment_id, assessment }
       setStep(2);
-    } catch (err) {
-      showToast('Token tidak valid atau tidak ditemukan.', 'error');
+    } catch (err: any) {
+      showToast(err?.message || 'Token tidak valid atau tidak ditemukan.', 'error');
     } finally {
       setLoading(false);
     }
@@ -544,8 +544,8 @@ function StudentPortal({ dataService, showToast }) {
       const newSession = await dataService.createStudentSession(session.token, session.assessment_id, studentName.trim(), studentClass.trim());
       setSession({ ...session, ...newSession });
       setStep(3); 
-    } catch (err) {
-      showToast('Gagal memulai ujian', 'error');
+    } catch (err: any) {
+      showToast(err?.message || 'Gagal memulai ujian', 'error');
     } finally {
       setLoading(false);
     }
