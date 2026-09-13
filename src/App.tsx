@@ -7,224 +7,8 @@ import {
   ChevronRight, Sparkles, X, Play, Hash, Lock
 } from 'lucide-react';
 
-const getStoredConfig = () => {
-  try {
-    const envUrl = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_SUPABASE_URL : '';
-    const envKey = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_SUPABASE_ANON_KEY : '';
-    
-    return {
-      url: envUrl || localStorage.getItem('pjok_supabase_url') || '',
-      key: envKey || localStorage.getItem('pjok_supabase_key') || '',
-      isDemo: localStorage.getItem('pjok_demo_mode') === 'true'
-    };
-  } catch (e) {
-    return { url: 'https://okrppilifbgfugldegku.supabase.co', key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rcnBwaWxpZmJnZnVnbGRlZ2t1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTEwMDAsImV4cCI6MjEwNDYyNzAwMH0.uK0o2isiNjh-9TWTfyNriwCKRJguanNqz1XiERzgfno', isDemo: false };
-  }
-};
+import { dataService } from './DataService';
 
-class MockDataService {
-  constructor() {
-    this.delay = (ms) => new Promise(res => setTimeout(res, ms));
-  }
-  
-  _get(key) { return JSON.parse(localStorage.getItem(key) || '[]'); }
-  _set(key, data) { localStorage.setItem(key, JSON.stringify(data)); }
-  _uuid() { return Math.random().toString(36).substring(2, 15); }
-
-  async getAssessments() {
-    await this.delay(300);
-    return this._get('mock_assessments');
-  }
-
-  async createAssessment(title, description, questions) {
-    await this.delay(500);
-    const assessments = this._get('mock_assessments');
-    
-    const formattedQuestions = questions.map((q, idx) => ({
-      ...q,
-      id: q.id || this._uuid(),
-      correct_option: q.correctOption !== undefined ? q.correctOption : q.correct_option
-    }));
-    
-    const newAss = { id: this._uuid(), title, description, created_at: new Date().toISOString(), questions: formattedQuestions };
-    this._set('mock_assessments', [newAss, ...assessments]);
-    return newAss;
-  }
-
-  async createToken(assessmentId) {
-    await this.delay(300);
-    const tokens = this._get('mock_tokens');
-    const token = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const newToken = {
-      id: this._uuid(),
-      token,
-      assessment_id: assessmentId,
-      created_at: new Date().toISOString()
-    };
-    this._set('mock_tokens', [newToken, ...tokens]);
-    return newToken;
-  }
-
-  async getTokens(assessmentId) {
-    await this.delay(300);
-    return this._get('mock_tokens').filter(t => t.assessment_id === assessmentId);
-  }
-
-  async getAssessmentByToken(token) {
-    await this.delay(300);
-    const tokenObj = this._get('mock_tokens').find(t => t.token === token);
-    if (!tokenObj) throw new Error("Token tidak valid");
-    const assessment = this._get('mock_assessments').find(a => a.id === tokenObj.assessment_id);
-    if (!assessment) throw new Error("Assessment tidak ditemukan");
-    return { token: tokenObj.token, assessment_id: tokenObj.assessment_id, assessment };
-  }
-
-  async createStudentSession(token, assessmentId, studentName, studentClass) {
-    await this.delay(300);
-    const sessions = this._get('mock_sessions');
-    const newSession = {
-      id: this._uuid(),
-      token,
-      assessment_id: assessmentId,
-      student_name: studentName,
-      student_class: studentClass,
-      status: 'active',
-      created_at: new Date().toISOString()
-    };
-    this._set('mock_sessions', [newSession, ...sessions]);
-    return newSession;
-  }
-async getSessions(assessmentId) {
-    const { data, error } = await supabase
-      .from('sessions')
-      .select('*')
-      .eq('assessment_id', assessmentId);
-    if (error) throw error;
-    return data || [];
-  }
-
-  async saveAnswer(sessionId, questionId, selectedOption) {
-    const { error } = await supabase
-      .from('answers')
-      .upsert({ 
-        session_id: sessionId, 
-        question_id: questionId, 
-        selected_option: selectedOption 
-      }, { onConflict: 'session_id,question_id' });
-    if (error) throw error;
-  }
-
-  async submitAssessment(sessionId, score) {
-    const { error } = await supabase
-      .from('sessions')
-      .update({ 
-        score: score, 
-        is_completed: true, 
-        status: 'completed',
-        submitted_at: new Date().toISOString() 
-      })
-      .eq('id', sessionId);
-    if (error) throw error;
-  }
-
-class SupabaseDataService {
-  constructor(config) {
-    this.url = config.url;
-    this.key = config.key;
-  }
-
-  headers() {
-    return {
-      'apikey': this.key,
-      'Authorization': `Bearer ${this.key}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=representation'
-    };
-  }
-
-  async request(endpoint, method = 'GET', body = null, extraHeaders = {}) {
-    const res = await fetch(`${this.url}/rest/v1/${endpoint}`, {
-      method,
-      headers: { ...this.headers(), ...extraHeaders },
-      body: body ? JSON.stringify(body) : null
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.message || 'Terjadi kesalahan pada server');
-    }
-    return res.json();
-  }
-
-  async getAssessments() {
-    return this.request('assessments?select=id,title,description,created_at&order=created_at.desc');
-  }
-
-  async createAssessment(title, description, questions) {
-    const assRes = await this.request('assessments', 'POST', { title, description });
-    const assessment = assRes[0];
-    
-    const qs = questions.map(q => ({
-      assessment_id: assessment.id,
-      text: q.text,
-      options: q.options,
-      correct_option: q.correctOption
-    }));
-    await this.request('questions', 'POST', qs);
-    
-    return assessment;
-  }
-
-  async createToken(assessmentId) {
-    const token = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const res = await this.request('tokens', 'POST', {
-      token,
-      assessment_id: assessmentId
-    });
-    return res[0];
-  }
-
-  async getTokens(assessmentId) {
-    return this.request(`tokens?assessment_id=eq.${assessmentId}&order=created_at.desc`);
-  }
-
-  async getAssessmentByToken(token) {
-    const res = await this.request(`tokens?token=eq.${token}&select=*,assessments(*,questions(*))`);
-    if (res.length === 0) throw new Error("Token tidak ditemukan.");
-    
-    const tokenObj = res[0];
-    return { token: tokenObj.token, assessment_id: tokenObj.assessment_id, assessment: tokenObj.assessments };
-  }
-
-  async createStudentSession(token, assessmentId, studentName, studentClass) {
-    const res = await this.request('sessions', 'POST', {
-      token,
-      assessment_id: assessmentId,
-      student_name: studentName,
-      student_class: studentClass,
-      status: 'active'
-    });
-    return res[0];
-  }
-
-  async getSessions(assessmentId) {
-    return this.request(`sessions?assessment_id=eq.${assessmentId}&order=created_at.desc`);
-  }
-
-  async saveAnswer(sessionId, questionId, selectedOption) {
-    return this.request('answers', 'POST', {
-      session_id: sessionId,
-      question_id: questionId,
-      selected_option: selectedOption
-    }, { 'Prefer': 'resolution=merge-duplicates' });
-  }
-
-  async submitAssessment(sessionId, score) {
-    return this.request(`sessions?id=eq.${sessionId}`, 'PATCH', {
-      status: 'completed',
-      score: score
-    });
-  }
-}
 
 function Modal({ children, onClose, title }) {
   return (
@@ -679,13 +463,13 @@ function TeacherResults({ dataService, showToast }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {sessions.length === 0 ? (
+                  {sessions.filter(s => s.student_name && s.student_name !== 'TOKEN').length === 0 ? (
                     <tr>
-                      <td colSpan="4" className="p-10 text-center text-slate-500">
+                      <td colSpan={4} className="p-10 text-center text-slate-500">
                         Belum ada siswa yang mengerjakan ujian ini.
                       </td>
                     </tr>
-                  ) : sessions.map(s => (
+                  ) : sessions.filter(s => s.student_name && s.student_name !== 'TOKEN').map(s => (
                     <tr key={s.id} className="hover:bg-slate-50/50 transition-colors bg-white">
                       <td className="p-4 sm:p-5 font-bold text-slate-800 text-base">{s.student_name}</td>
                       <td className="p-4 sm:p-5 text-slate-600 font-medium">{s.student_class}</td>
@@ -695,7 +479,13 @@ function TeacherResults({ dataService, showToast }) {
                         </span>
                       </td>
                       <td className="p-4 sm:p-5 text-center">
-                        <span className="font-black text-xl text-emerald-600">{s.score}</span>
+                        {s.score !== null && s.score !== undefined ? (
+                          <span className="font-black text-xl text-emerald-600">{s.score}</span>
+                        ) : s.is_completed || s.status === 'completed' ? (
+                          <span className="font-black text-xl text-emerald-600">0</span>
+                        ) : (
+                          <span className="text-xs bg-amber-50 text-amber-600 border border-amber-200 px-2 py-1 rounded-lg font-bold">Proses</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -900,7 +690,8 @@ function AssessmentTaking({ session, dataService, showToast, onComplete }) {
         }, 500);
       }
     } catch (err) {
-      showToast('Jawaban tersimpan secara lokal.', 'info'); // Mengubah teks error
+      console.error('Error saving answer to Supabase:', err);
+      showToast('Jawaban tersimpan secara lokal.', 'info');
       setSavingState('saved');
     }
   };
@@ -925,6 +716,7 @@ function AssessmentTaking({ session, dataService, showToast, onComplete }) {
       await dataService.submitAssessment(session.id, score);
       onComplete();
     } catch (err) {
+      console.error('Error submitting assessment to Supabase:', err);
       showToast('Gagal mengumpulkan ujian. Coba lagi.', 'error');
       setIsSubmitting(false);
     }
@@ -1179,14 +971,7 @@ function TeacherDashboard({ dataService, showToast }) {
 
 export default function App() {
   const [route, setRoute] = useState(window.location.hash || '#/');
-  const [toast, setToast] = useState(null);
-  
-  const [dataService] = useState(() => {
-    return new SupabaseDataService({
-        url: "https://okrppilifbgfugldegku.supabase.co",
-        key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9rcnBwaWxpZmJnZnVnbGRlZ2t1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTEwMDAsImV4cCI6MjEwNDYyNzAwMH0.uK0o2isiNjh-9TWTfyNriwCKRJguanNqz1XiERzgfno"
-    });
-  });
+  const [toast, setToast] = useState<{ message: string; type: string } | null>(null);
 
   useEffect(() => {
     const handleHashChange = () => setRoute(window.location.hash || '#/');
