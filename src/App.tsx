@@ -4,29 +4,34 @@ import {
   ArrowRight, Save, LogOut, Loader2, Link as LinkIcon, 
   AlertCircle, Trash2, HelpCircle, Check, Copy, Settings, 
   Key, RefreshCw, Award, Activity, Clock, ShieldCheck, 
-  ChevronRight, Sparkles, X, Play, Hash, Lock
+  ChevronRight, Sparkles, X, Play, Hash, Lock,
+  FileDown, Eye, FileText, CheckCircle, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 import { dataService } from './DataService';
+import { generateAssessmentPDF } from './utils/pdfGenerator';
+import type { StudentSubmissionDetail } from './types/database';
+import LandingPage from './components/LandingPage';
 
 
-function Modal({ children, onClose, title }) {
+function Modal({ children, onClose, title, maxWidth = 'max-w-md' }: { children: React.ReactNode; onClose: () => void; title: string; maxWidth?: string }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        <div className="flex justify-between items-center p-5 border-b border-slate-100 bg-slate-50/50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
+      <div className={`bg-white rounded-3xl shadow-2xl w-full ${maxWidth} my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-slate-100`}>
+        <div className="flex justify-between items-center p-5 border-b border-slate-100 bg-slate-50/70">
           <h3 className="font-bold text-slate-800 text-lg">{title}</h3>
           <button onClick={onClose} className="p-2 rounded-full text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="p-6">
+        <div className="p-5 sm:p-6 max-h-[82vh] overflow-y-auto">
           {children}
         </div>
       </div>
     </div>
   );
 }
+
 
 const localQuestionBank = {
   "Kelas 1 - Pertemuan 1: Gerak Dasar Lokomotor & Non-Lokomotor": [
@@ -130,13 +135,24 @@ const localQuestionBank = {
 function TeacherCreateAssessment({ dataService, showToast, onSuccess }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [questions, setQuestions] = useState([{ text: '', options: ['', '', '', ''], correctOption: 0 }]);
+  const [targetClass, setTargetClass] = useState('Kelas 4');
+  const [questions, setQuestions] = useState([{ text: '', options: ['', '', '', ''], correctOption: 0, points: 10 }]);
   const [loading, setLoading] = useState(false);
   
   const [selectedTopic, setSelectedTopic] = useState(Object.keys(localQuestionBank)[0]);
   const [bankCount, setBankCount] = useState(10); 
   
   const maxAvailable = localQuestionBank[selectedTopic]?.length || 0;
+
+  const handleTopicChange = (topic: string) => {
+    setSelectedTopic(topic);
+    if (topic.includes('Kelas 1')) setTargetClass('Kelas 1');
+    else if (topic.includes('Kelas 2')) setTargetClass('Kelas 2');
+    else if (topic.includes('Kelas 3')) setTargetClass('Kelas 3');
+    else if (topic.includes('Kelas 4')) setTargetClass('Kelas 4');
+    else if (topic.includes('Kelas 5')) setTargetClass('Kelas 5');
+    else if (topic.includes('Kelas 6')) setTargetClass('Kelas 6');
+  };
 
   const handleGenerateFromBank = () => {
     const availableQuestions = localQuestionBank[selectedTopic];
@@ -146,7 +162,10 @@ function TeacherCreateAssessment({ dataService, showToast, onSuccess }) {
 
     const validCount = Math.min(bankCount, availableQuestions.length);
     const shuffled = [...availableQuestions].sort(() => 0.5 - Math.random());
-    const selected = shuffled.slice(0, validCount);
+    const selected = shuffled.slice(0, validCount).map(q => ({
+      ...q,
+      points: 10
+    }));
     
     const currentList = questions.length === 1 && !questions[0].text ? [] : questions;
     setQuestions([...currentList, ...selected]);
@@ -164,7 +183,7 @@ function TeacherCreateAssessment({ dataService, showToast, onSuccess }) {
 
     setLoading(true);
     try {
-      await dataService.createAssessment(title, description, questions);
+      await dataService.createAssessment(title, description, questions, targetClass);
       showToast('Assessment berhasil disimpan!', 'success');
       onSuccess();
     } catch (err: any) {
@@ -174,19 +193,51 @@ function TeacherCreateAssessment({ dataService, showToast, onSuccess }) {
     }
   };
 
+  const totalPoints = questions.reduce((acc, q) => acc + (Number(q.points) > 0 ? Number(q.points) : 10), 0);
+
   return (
     <div className="space-y-6 pb-24">
       <div className="bg-white p-5 sm:p-8 rounded-3xl shadow-sm border border-slate-100">
         <h2 className="text-xl sm:text-2xl font-bold text-slate-800 mb-6">Buat Assessment Baru</h2>
         
         <div className="space-y-5 mb-8">
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Judul Assessment</label>
-            <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Contoh: UTS PJOK Kelas 5" className="w-full p-3 sm:p-4 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all text-sm sm:text-base" />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-bold text-slate-700 mb-2">Judul Assessment</label>
+              <input 
+                type="text" 
+                value={title} 
+                onChange={(e) => setTitle(e.target.value)} 
+                placeholder="Contoh: UTS PJOK Kelas 4" 
+                className="w-full p-3 sm:p-4 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all text-sm sm:text-base font-medium" 
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">Target Kelas</label>
+              <select 
+                value={targetClass} 
+                onChange={(e) => setTargetClass(e.target.value)} 
+                className="w-full p-3.5 sm:p-4 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all text-sm sm:text-base bg-white font-medium text-slate-700"
+              >
+                <option value="Kelas 1">Kelas 1</option>
+                <option value="Kelas 2">Kelas 2</option>
+                <option value="Kelas 3">Kelas 3</option>
+                <option value="Kelas 4">Kelas 4</option>
+                <option value="Kelas 5">Kelas 5</option>
+                <option value="Kelas 6">Kelas 6</option>
+                <option value="Semua Kelas">Semua Kelas</option>
+              </select>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2">Deskripsi / Petunjuk</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Petunjuk pengerjaan..." className="w-full p-3 sm:p-4 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all text-sm sm:text-base" rows="2" />
+            <textarea 
+              value={description} 
+              onChange={(e) => setDescription(e.target.value)} 
+              placeholder="Petunjuk pengerjaan ujian..." 
+              className="w-full p-3 sm:p-4 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all text-sm sm:text-base font-medium" 
+              rows={2} 
+            />
           </div>
         </div>
 
@@ -203,7 +254,7 @@ function TeacherCreateAssessment({ dataService, showToast, onSuccess }) {
           <div className="flex flex-col lg:flex-row gap-3">
             <select 
               value={selectedTopic} 
-              onChange={(e) => setSelectedTopic(e.target.value)} 
+              onChange={(e) => handleTopicChange(e.target.value)} 
               className="flex-1 p-3.5 border-0 rounded-2xl shadow-sm outline-none focus:ring-4 focus:ring-emerald-500/20 text-slate-700 bg-white font-medium text-sm sm:text-base appearance-none truncate"
             >
               {Object.keys(localQuestionBank).map((topic) => (
@@ -242,14 +293,38 @@ function TeacherCreateAssessment({ dataService, showToast, onSuccess }) {
         </div>
 
         <div className="space-y-6">
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="font-bold text-slate-800 text-lg">Daftar Pertanyaan <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded-lg text-sm ml-2">{questions.length}</span></h3>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2">
+            <h3 className="font-bold text-slate-800 text-lg">
+              Daftar Pertanyaan <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded-lg text-sm ml-2">{questions.length}</span>
+            </h3>
+            <div className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center">
+              <span>Total Bobot: </span>
+              <span className="font-black text-emerald-950 ml-1.5">{totalPoints} Poin</span>
+            </div>
           </div>
           
           {questions.map((q, qIdx) => (
             <div key={qIdx} className="p-4 sm:p-6 border border-slate-200 rounded-3xl bg-slate-50 relative group transition-all hover:border-slate-300">
-              <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-4">
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-200 px-3 py-1 rounded-full">Soal {qIdx + 1}</label>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                <div className="flex items-center gap-3">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-200 px-3 py-1 rounded-full">Soal {qIdx + 1}</label>
+                  <div className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-1 rounded-full text-xs font-bold text-slate-700 shadow-xs">
+                    <span className="text-slate-400">Bobot:</span>
+                    <input 
+                      type="number" 
+                      min="1" 
+                      max="100" 
+                      value={q.points !== undefined ? q.points : 10} 
+                      onChange={(e) => {
+                        const newQ = [...questions];
+                        newQ[qIdx].points = parseInt(e.target.value) || 0;
+                        setQuestions(newQ);
+                      }}
+                      className="w-12 text-center bg-slate-50 border border-slate-200 rounded font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <span className="text-slate-500">Poin</span>
+                  </div>
+                </div>
                 <button 
                   type="button"
                   onClick={() => setQuestions(questions.filter((_, i) => i !== qIdx))}
@@ -265,7 +340,7 @@ function TeacherCreateAssessment({ dataService, showToast, onSuccess }) {
                   value={q.text}
                   onChange={(e) => { const newQ = [...questions]; newQ[qIdx].text = e.target.value; setQuestions(newQ); }}
                   className="w-full p-4 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none bg-white font-medium text-slate-800 resize-none"
-                  rows="2" placeholder="Tuliskan pertanyaan di sini..."
+                  rows={2} placeholder="Tuliskan pertanyaan di sini..."
                 />
               </div>
 
@@ -296,7 +371,7 @@ function TeacherCreateAssessment({ dataService, showToast, onSuccess }) {
         <div className="mt-8 flex flex-col sm:flex-row gap-4">
           <button 
             type="button" 
-            onClick={() => setQuestions([...questions, { text: '', options: ['', '', '', ''], correctOption: 0 }])}
+            onClick={() => setQuestions([...questions, { text: '', options: ['', '', '', ''], correctOption: 0, points: 10 }])}
             className="flex-1 px-4 py-4 bg-slate-100 hover:bg-slate-200 active:scale-[0.98] text-slate-700 font-bold rounded-2xl flex items-center justify-center transition-all"
           >
             <PlusCircle className="w-5 h-5 mr-2" /> Tambah Soal Manual
@@ -316,12 +391,185 @@ function TeacherCreateAssessment({ dataService, showToast, onSuccess }) {
   );
 }
 
+function StudentDetailModal({ sessionId, onClose, showToast, onDownloadPDF, pdfLoading }) {
+  const [detail, setDetail] = useState<StudentSubmissionDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadDetail = async () => {
+      try {
+        const res = await dataService.getSessionDetails(sessionId);
+        setDetail(res);
+      } catch (err: any) {
+        showToast(err?.message || 'Gagal memuat detail jawaban.', 'error');
+        onClose();
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadDetail();
+  }, [sessionId]);
+
+  return (
+    <Modal title="Detail Hasil Assessment Siswa" onClose={onClose} maxWidth="max-w-4xl">
+      {loading ? (
+        <div className="p-12 flex flex-col items-center justify-center space-y-3">
+          <Loader2 className="w-10 h-10 text-emerald-500 animate-spin" />
+          <p className="text-slate-500 text-sm font-medium">Memuat detail pengerjaan...</p>
+        </div>
+      ) : detail ? (
+        <div className="space-y-6">
+          {/* Header Identitas Siswa */}
+          <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+              <div>
+                <span className="text-slate-400 text-xs block font-bold uppercase">Nama Siswa</span>
+                <span className="font-bold text-slate-800 text-base">{detail.student_name}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 text-xs block font-bold uppercase">Kelas</span>
+                <span className="font-bold text-slate-800 text-base">{detail.student_class}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 text-xs block font-bold uppercase">Assessment</span>
+                <span className="font-bold text-slate-800 text-base truncate block" title={detail.assessment_title}>{detail.assessment_title}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 text-xs block font-bold uppercase">Tanggal</span>
+                <span className="font-medium text-slate-700">{detail.date_formatted}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 text-xs block font-bold uppercase">Waktu Pengerjaan</span>
+                <span className="font-medium text-slate-700">{detail.duration_text}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 text-xs block font-bold uppercase">Token Ujian</span>
+                <span className="font-mono font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">{detail.token}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Kartu Ringkasan Nilai */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl text-center">
+              <span className="text-xs font-bold text-emerald-700 uppercase block mb-1">Nilai Akhir</span>
+              <span className="text-3xl font-black text-emerald-600">{detail.score}</span>
+              <span className="text-[11px] text-emerald-600/70 block">dari 100</span>
+            </div>
+            <div className="bg-teal-50 border border-teal-200 p-4 rounded-2xl text-center">
+              <span className="text-xs font-bold text-teal-700 uppercase block mb-1">Jumlah Soal</span>
+              <span className="text-3xl font-black text-teal-800">{detail.total_questions}</span>
+              <span className="text-[11px] text-teal-600/70 block">Butir</span>
+            </div>
+            <div className="bg-blue-50 border border-blue-200 p-4 rounded-2xl text-center">
+              <span className="text-xs font-bold text-blue-700 uppercase block mb-1">Jawaban Benar</span>
+              <span className="text-3xl font-black text-blue-600">{detail.total_correct}</span>
+              <span className="text-[11px] text-blue-600/70 block">Soal</span>
+            </div>
+            <div className="bg-rose-50 border border-rose-200 p-4 rounded-2xl text-center">
+              <span className="text-xs font-bold text-rose-700 uppercase block mb-1">Jawaban Salah</span>
+              <span className="text-3xl font-black text-rose-600">{detail.total_incorrect}</span>
+              <span className="text-[11px] text-rose-600/70 block">Soal</span>
+            </div>
+          </div>
+
+          {/* Detail Jawaban Per Nomor Soal */}
+          <div>
+            <h4 className="font-bold text-slate-800 text-base mb-3 flex items-center justify-between">
+              <span>Rincian Seluruh Jawaban ({detail.items.length} Soal)</span>
+            </h4>
+            <div className="space-y-3 max-h-[42vh] overflow-y-auto pr-1">
+              {detail.items.map((item) => (
+                <div 
+                  key={item.question_number} 
+                  className={`p-4 rounded-2xl border transition-all ${
+                    item.is_correct 
+                      ? 'bg-emerald-50/40 border-emerald-200' 
+                      : 'bg-rose-50/40 border-rose-200'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700">
+                      Soal {item.question_number}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full flex items-center ${
+                        item.is_correct 
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                          : 'bg-rose-100 text-rose-800 border border-rose-300'
+                      }`}>
+                        {item.is_correct ? <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-600" /> : <AlertCircle className="w-3.5 h-3.5 mr-1 text-rose-600" />}
+                        {item.is_correct ? 'Benar' : 'Salah'}
+                      </span>
+                      <span className="text-xs font-bold text-slate-500 bg-white px-2 py-1 rounded-lg border border-slate-200">
+                        {item.points} Poin
+                      </span>
+                    </div>
+                  </div>
+
+                  <p className="font-semibold text-slate-800 text-sm sm:text-base mb-3 leading-relaxed">
+                    {item.question_text}
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm">
+                    <div className={`p-2.5 rounded-xl border ${
+                      item.is_correct 
+                        ? 'bg-white border-emerald-200 text-slate-700' 
+                        : 'bg-white border-rose-200 text-rose-900 font-medium'
+                    }`}>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block mb-0.5">Jawaban Siswa</span>
+                      <span>{item.selected_text}</span>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-700">
+                      <span className="text-[10px] text-emerald-600 font-bold uppercase block mb-0.5">Kunci Jawaban</span>
+                      <span className="font-semibold text-emerald-800">{item.correct_text}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Footer Actions */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-100">
+            <button
+              onClick={() => onDownloadPDF(detail.session_id)}
+              disabled={pdfLoading}
+              className="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:bg-emerald-300 text-white font-bold rounded-2xl transition-all shadow-md shadow-emerald-500/20 flex items-center justify-center text-sm"
+            >
+              {pdfLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileDown className="w-4 h-4 mr-2" />}
+              Download PDF Hasil Assessment
+            </button>
+            <button
+              onClick={onClose}
+              className="w-full sm:w-auto px-6 py-3 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 font-bold rounded-2xl transition-colors text-sm"
+            >
+              Tutup
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </Modal>
+  );
+}
+
 function TeacherResults({ dataService, showToast }) {
   const [assessments, setAssessments] = useState([]);
   const [selectedAss, setSelectedAss] = useState(null);
   const [tokens, setTokens] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
+  const [pdfLoadingId, setPdfLoadingId] = useState<string | null>(null);
+
+  // States for deleting completed assessments, questions, and sessions
+  const [showDeleteAssModal, setShowDeleteAssModal] = useState(false);
+  const [deletingAss, setDeletingAss] = useState(false);
+  const [showQuestions, setShowQuestions] = useState(false);
+  const [deleteQuestionIdx, setDeleteQuestionIdx] = useState<number | null>(null);
+  const [deletingQuestion, setDeletingQuestion] = useState(false);
+  const [deleteSessionModal, setDeleteSessionModal] = useState<{ id: string; name: string } | null>(null);
+  const [deletingSession, setDeletingSession] = useState(false);
 
   useEffect(() => { loadData(); }, []);
 
@@ -358,6 +606,66 @@ function TeacherResults({ dataService, showToast }) {
     } catch (err: any) { showToast(err?.message || 'Gagal membuat token', 'error'); }
   };
 
+  const handleDownloadPDF = async (sessionId: string) => {
+    setPdfLoadingId(sessionId);
+    try {
+      const details = await dataService.getSessionDetails(sessionId);
+      generateAssessmentPDF(details);
+      showToast('File PDF berhasil dibuat dan diunduh!', 'success');
+    } catch (err: any) {
+      showToast(err?.message || 'Gagal membuat file PDF.', 'error');
+    } finally {
+      setPdfLoadingId(null);
+    }
+  };
+
+  const handleDeleteAssessment = async () => {
+    if (!selectedAss) return;
+    setDeletingAss(true);
+    try {
+      await dataService.deleteAssessment(selectedAss.id);
+      showToast('Ujian beserta seluruh soal dan data nilai berhasil dihapus!', 'success');
+      setShowDeleteAssModal(false);
+      setSelectedAss(null);
+      await loadData();
+    } catch (err: any) {
+      showToast(err?.message || 'Gagal menghapus ujian', 'error');
+    } finally {
+      setDeletingAss(false);
+    }
+  };
+
+  const handleDeleteQuestion = async (qIndex: number) => {
+    if (!selectedAss) return;
+    setDeletingQuestion(true);
+    try {
+      const updated = await dataService.deleteQuestionFromAssessment(selectedAss.id, qIndex);
+      setSelectedAss(updated);
+      setAssessments(prev => prev.map(a => a.id === updated.id ? updated : a));
+      setDeleteQuestionIdx(null);
+      showToast('Soal berhasil dihapus dari ujian!', 'success');
+    } catch (err: any) {
+      showToast(err?.message || 'Gagal menghapus soal', 'error');
+    } finally {
+      setDeletingQuestion(false);
+    }
+  };
+
+  const handleDeleteSession = async () => {
+    if (!deleteSessionModal) return;
+    setDeletingSession(true);
+    try {
+      await dataService.deleteSession(deleteSessionModal.id);
+      setSessions(prev => prev.filter(s => s.id !== deleteSessionModal.id));
+      showToast(`Data nilai ${deleteSessionModal.name} berhasil dihapus!`, 'success');
+      setDeleteSessionModal(null);
+    } catch (err: any) {
+      showToast(err?.message || 'Gagal menghapus data siswa', 'error');
+    } finally {
+      setDeletingSession(false);
+    }
+  };
+
   const copyLink = (token) => {
     const url = `${window.location.origin}${window.location.pathname}#/siswa?token=${token}`;
     try {
@@ -379,6 +687,16 @@ function TeacherResults({ dataService, showToast }) {
 
   return (
     <div className="space-y-6 pb-24">
+      {detailSessionId && (
+        <StudentDetailModal 
+          sessionId={detailSessionId} 
+          onClose={() => setDetailSessionId(null)} 
+          showToast={showToast}
+          onDownloadPDF={handleDownloadPDF}
+          pdfLoading={pdfLoadingId === detailSessionId}
+        />
+      )}
+
       <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="p-5 sm:p-6 border-b border-slate-100 bg-slate-50/80">
           <h2 className="text-lg sm:text-xl font-bold text-slate-800">Pilih Assessment</h2>
@@ -411,6 +729,117 @@ function TeacherResults({ dataService, showToast }) {
 
       {selectedAss && (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+          {/* Panel Informasi Ujian & Aksi Hapus */}
+          <div className="bg-white p-5 sm:p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-3 py-1 bg-emerald-50 text-emerald-700 font-bold text-xs rounded-full border border-emerald-200">
+                  {selectedAss.class_name || 'Semua Kelas'}
+                </span>
+                <span className="px-3 py-1 bg-indigo-50 text-indigo-700 font-bold text-xs rounded-full border border-indigo-200">
+                  {Array.isArray(selectedAss.questions) ? `${selectedAss.questions.length} Butir Soal` : '0 Soal'}
+                </span>
+                <span className="px-3 py-1 bg-slate-100 text-slate-600 font-bold text-xs rounded-full">
+                  {sessions.filter(s => s.student_name && s.student_name !== 'TOKEN').length} Siswa Mengerjakan
+                </span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-800">{selectedAss.title}</h2>
+              {selectedAss.description && (
+                <p className="text-slate-500 text-sm">{selectedAss.description}</p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+              <button
+                type="button"
+                onClick={() => setShowQuestions(!showQuestions)}
+                className="flex-1 md:flex-none px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl flex items-center justify-center text-sm transition-all"
+              >
+                <FileText className="w-4 h-4 mr-2 text-indigo-600" />
+                {showQuestions ? 'Tutup Daftar Soal' : 'Lihat / Kelola Soal'}
+                {showQuestions ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowDeleteAssModal(true)}
+                className="flex-1 md:flex-none px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 font-bold rounded-2xl flex items-center justify-center text-sm transition-all border border-rose-200"
+                title="Hapus ujian dan soal yang telah selesai dilakukan"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Hapus Ujian Selesai
+              </button>
+            </div>
+          </div>
+
+          {/* Panel Daftar Soal Ujian (Bisa Dilihat & Dihapus Per Butir) */}
+          {showQuestions && (
+            <div className="bg-white p-5 sm:p-6 rounded-3xl shadow-sm border border-slate-100 space-y-4 animate-in fade-in duration-200">
+              <div className="flex justify-between items-center">
+                <h3 className="font-bold text-slate-800 text-base flex items-center">
+                  <BookOpen className="w-5 h-5 mr-2 text-indigo-600" />
+                  Daftar Soal Ujian ({Array.isArray(selectedAss.questions) ? selectedAss.questions.length : 0})
+                </h3>
+                <span className="text-xs text-slate-400 hidden sm:inline">Guru dapat menghapus butir soal jika ujian telah selesai</span>
+              </div>
+
+              {(!selectedAss.questions || selectedAss.questions.length === 0) ? (
+                <p className="text-slate-400 text-sm italic py-4 text-center">Tidak ada butir soal pada ujian ini.</p>
+              ) : (
+                <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+                  {selectedAss.questions.map((q: any, idx: number) => {
+                    const correctIdx = q.correct_option !== undefined ? q.correct_option : (q.correctOption ?? 0);
+                    return (
+                      <div key={idx} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl transition-all hover:border-slate-300">
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="w-7 h-7 rounded-xl bg-indigo-100 text-indigo-700 font-black text-xs flex items-center justify-center">
+                              {idx + 1}
+                            </span>
+                            <span className="text-xs font-bold text-slate-500 bg-white px-2 py-1 rounded-lg border border-slate-200">
+                              {q.points || 10} Poin
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteQuestionIdx(idx)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                            title="Hapus butir soal ini"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <p className="text-sm font-semibold text-slate-800 mb-3">{q.text}</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                          {q.options?.map((opt: string, optIdx: number) => {
+                            const isCorrect = optIdx === correctIdx;
+                            return (
+                              <div
+                                key={optIdx}
+                                className={`p-2.5 rounded-xl border flex items-center gap-2 ${
+                                  isCorrect 
+                                    ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' 
+                                    : 'bg-white border-slate-200 text-slate-600'
+                                }`}
+                              >
+                                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
+                                  isCorrect ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'
+                                }`}>
+                                  {String.fromCharCode(65 + optIdx)}
+                                </span>
+                                <span>{opt}</span>
+                                {isCorrect && <Check className="w-3.5 h-3.5 ml-auto text-emerald-600" />}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Token Management Panel */}
           <div className="bg-white p-5 sm:p-8 rounded-3xl shadow-sm border border-slate-100">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
@@ -451,49 +880,224 @@ function TeacherResults({ dataService, showToast }) {
 
           {/* Student Submissions List */}
           <div className="bg-white p-5 sm:p-8 rounded-3xl shadow-sm border border-slate-100">
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-800 mb-6">Daftar Nilai Siswa</h2>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-bold text-slate-800">Daftar Nilai Siswa</h2>
+                <p className="text-slate-500 text-sm mt-1">Hasil ujian tertera lengkap beserta tombol lihat detail jawaban dan cetak PDF.</p>
+              </div>
+            </div>
+
             <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-sm">
-              <table className="w-full text-left border-collapse min-w-[600px]">
+              <table className="w-full text-left border-collapse min-w-[760px]">
                 <thead>
-                  <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
+                  <tr className="bg-slate-50 text-slate-500 text-xs sm:text-sm border-b border-slate-200">
                     <th className="p-4 sm:p-5 font-bold">Nama Siswa</th>
                     <th className="p-4 sm:p-5 font-bold">Kelas</th>
-                    <th className="p-4 sm:p-5 font-bold text-center">Token Digunakan</th>
-                    <th className="p-4 sm:p-5 font-bold text-center w-28">Nilai</th>
+                    <th className="p-4 sm:p-5 font-bold">Assessment</th>
+                    <th className="p-4 sm:p-5 font-bold text-center">Nilai</th>
+                    <th className="p-4 sm:p-5 font-bold text-center">Benar</th>
+                    <th className="p-4 sm:p-5 font-bold text-center">Salah</th>
+                    <th className="p-4 sm:p-5 font-bold text-center">Waktu Pengerjaan</th>
+                    <th className="p-4 sm:p-5 font-bold text-center">Aksi</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100 text-sm">
                   {sessions.filter(s => s.student_name && s.student_name !== 'TOKEN').length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="p-10 text-center text-slate-500">
+                      <td colSpan={8} className="p-10 text-center text-slate-500">
                         Belum ada siswa yang mengerjakan ujian ini.
                       </td>
                     </tr>
-                  ) : sessions.filter(s => s.student_name && s.student_name !== 'TOKEN').map(s => (
-                    <tr key={s.id} className="hover:bg-slate-50/50 transition-colors bg-white">
-                      <td className="p-4 sm:p-5 font-bold text-slate-800 text-base">{s.student_name}</td>
-                      <td className="p-4 sm:p-5 text-slate-600 font-medium">{s.student_class}</td>
-                      <td className="p-4 sm:p-5 text-center">
-                        <span className="font-mono text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
-                          {s.token}
-                        </span>
-                      </td>
-                      <td className="p-4 sm:p-5 text-center">
-                        {s.score !== null && s.score !== undefined ? (
-                          <span className="font-black text-xl text-emerald-600">{s.score}</span>
-                        ) : s.is_completed || s.status === 'completed' ? (
-                          <span className="font-black text-xl text-emerald-600">0</span>
-                        ) : (
-                          <span className="text-xs bg-amber-50 text-amber-600 border border-amber-200 px-2 py-1 rounded-lg font-bold">Proses</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  ) : sessions.filter(s => s.student_name && s.student_name !== 'TOKEN').map(s => {
+                    const isPdfLoading = pdfLoadingId === s.id;
+                    const totalQ = s.total_questions || selectedAss?.questions?.length || 0;
+                    const correctCount = s.total_correct !== undefined && s.total_correct !== null
+                      ? s.total_correct
+                      : (s.score !== null && s.score !== undefined ? Math.round((s.score / 100) * totalQ) : 0);
+                    const incorrectCount = s.total_incorrect !== undefined && s.total_incorrect !== null
+                      ? s.total_incorrect
+                      : Math.max(0, totalQ - correctCount);
+                    const dateStr = s.created_at ? new Date(s.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) : '-';
+
+                    return (
+                      <tr key={s.id} className="hover:bg-slate-50/50 transition-colors bg-white">
+                        <td className="p-4 sm:p-5 font-bold text-slate-800 text-base">{s.student_name}</td>
+                        <td className="p-4 sm:p-5 text-slate-600 font-medium">{s.student_class}</td>
+                        <td className="p-4 sm:p-5 text-slate-600 text-xs max-w-[150px] truncate" title={selectedAss?.title}>{selectedAss?.title}</td>
+                        <td className="p-4 sm:p-5 text-center">
+                          {s.score !== null && s.score !== undefined ? (
+                            <span className="font-black text-xl text-emerald-600">{s.score}</span>
+                          ) : s.is_completed || s.status === 'completed' ? (
+                            <span className="font-black text-xl text-emerald-600">0</span>
+                          ) : (
+                            <span className="text-xs bg-amber-50 text-amber-600 border border-amber-200 px-2 py-1 rounded-lg font-bold">Proses</span>
+                          )}
+                        </td>
+                        <td className="p-4 sm:p-5 text-center">
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            {correctCount}
+                          </span>
+                        </td>
+                        <td className="p-4 sm:p-5 text-center">
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                            {incorrectCount}
+                          </span>
+                        </td>
+                        <td className="p-4 sm:p-5 text-center text-xs text-slate-500 whitespace-nowrap">
+                          <div className="font-medium text-slate-700">{dateStr}</div>
+                          <div className="text-[11px] text-slate-400">{s.duration_text || '-'}</div>
+                        </td>
+                        <td className="p-4 sm:p-5 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => setDetailSessionId(s.id)}
+                              title="Lihat Detail Jawaban"
+                              className="px-3 py-1.5 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 rounded-xl font-bold text-xs flex items-center transition-colors border border-slate-200 shadow-xs"
+                            >
+                              <Eye className="w-3.5 h-3.5 mr-1" />
+                              Detail
+                            </button>
+                            <button
+                              onClick={() => handleDownloadPDF(s.id)}
+                              disabled={isPdfLoading}
+                              title="Download PDF Hasil Assessment"
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 active:scale-95 text-white rounded-xl font-bold text-xs flex items-center transition-all shadow-xs"
+                            >
+                              {isPdfLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <FileDown className="w-3.5 h-3.5 mr-1" />}
+                              PDF
+                            </button>
+                            <button
+                              onClick={() => setDeleteSessionModal({ id: s.id, name: s.student_name })}
+                              title="Hapus Nilai Siswa Ini"
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors border border-transparent hover:border-rose-200"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal Konfirmasi Hapus Ujian */}
+      {showDeleteAssModal && selectedAss && (
+        <Modal onClose={() => !deletingAss && setShowDeleteAssModal(false)} title="Konfirmasi Hapus Ujian">
+          <div className="space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <AlertCircle className="w-8 h-8" />
+            </div>
+            <div className="text-center">
+              <h4 className="text-lg font-black text-slate-800 mb-1">Hapus Ujian Selesai?</h4>
+              <p className="text-slate-600 text-sm leading-relaxed">
+                Anda akan menghapus ujian <span className="font-bold text-slate-800">"{selectedAss.title}"</span> beserta seluruh butir soal, token ujian, dan data nilai siswa yang sudah selesai dikerjakan.
+              </p>
+              <div className="mt-3 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-semibold">
+                ⚠️ Peringatan: Tindakan ini permanen dan data tidak dapat dikembalikan lagi.
+              </div>
+            </div>
+            <div className="flex gap-3 pt-3">
+              <button
+                type="button"
+                disabled={deletingAss}
+                onClick={() => setShowDeleteAssModal(false)}
+                className="flex-1 py-3 px-4 rounded-xl border border-slate-200 font-bold text-slate-600 hover:bg-slate-50 transition-colors text-sm"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={deletingAss}
+                onClick={handleDeleteAssessment}
+                className="flex-1 py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold transition-all flex items-center justify-center text-sm shadow-lg shadow-rose-600/30"
+              >
+                {deletingAss ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                Ya, Hapus Ujian
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal Konfirmasi Hapus Butir Soal */}
+      {deleteQuestionIdx !== null && selectedAss && (
+        <Modal onClose={() => !deletingQuestion && setDeleteQuestionIdx(null)} title="Konfirmasi Hapus Soal">
+          <div className="space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <div className="text-center">
+              <h4 className="text-base font-bold text-slate-800 mb-1">
+                Hapus Soal Nomor {deleteQuestionIdx + 1}?
+              </h4>
+              <p className="text-slate-500 text-xs line-clamp-2 px-2">
+                "{selectedAss.questions?.[deleteQuestionIdx]?.text}"
+              </p>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                disabled={deletingQuestion}
+                onClick={() => setDeleteQuestionIdx(null)}
+                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 font-bold text-slate-600 hover:bg-slate-50 transition-colors text-xs"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={deletingQuestion}
+                onClick={() => handleDeleteQuestion(deleteQuestionIdx)}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold transition-all flex items-center justify-center text-xs shadow-md shadow-rose-600/20"
+              >
+                {deletingQuestion ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Trash2 className="w-4 h-4 mr-1" />}
+                Hapus Soal
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal Konfirmasi Hapus Nilai Siswa */}
+      {deleteSessionModal && (
+        <Modal onClose={() => !deletingSession && setDeleteSessionModal(null)} title="Konfirmasi Hapus Nilai Siswa">
+          <div className="space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <AlertCircle className="w-8 h-8" />
+            </div>
+            <div className="text-center">
+              <h4 className="text-base font-bold text-slate-800 mb-1">
+                Hapus Data Siswa: {deleteSessionModal.name}?
+              </h4>
+              <p className="text-slate-500 text-xs">
+                Data pengerjaan ujian dan rincian jawaban siswa ini akan dihapus permanen.
+              </p>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                disabled={deletingSession}
+                onClick={() => setDeleteSessionModal(null)}
+                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 font-bold text-slate-600 hover:bg-slate-50 transition-colors text-xs"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={deletingSession}
+                onClick={handleDeleteSession}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold transition-all flex items-center justify-center text-xs shadow-md shadow-rose-600/20"
+              >
+                {deletingSession ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Trash2 className="w-4 h-4 mr-1" />}
+                Hapus Nilai
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
       <style>{`.hide-scrollbar::-webkit-scrollbar { display: none; } .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }`}</style>
     </div>
@@ -586,7 +1190,7 @@ function StudentPortal({ dataService, showToast }) {
             <BookOpen className="w-8 h-8 text-white" />
           </div>
           <h2 className="text-2xl font-black text-white tracking-wide">Portal Siswa</h2>
-          <p className="text-emerald-100 text-sm mt-1 font-medium">PJOK SDI SAIQ AL-HIKMAH</p>
+          <p className="text-emerald-100 text-sm mt-1 font-medium">Tugas Online • SDI SAIQ AL-HIKMAH</p>
         </div>
         
         <div className="p-6 sm:p-8">
@@ -696,14 +1300,33 @@ function AssessmentTaking({ session, dataService, showToast, onComplete }) {
     }
   };
 
-  const calculateScore = () => {
+  const calculateResult = () => {
     let correct = 0;
-    questions.forEach((q, idx) => {
+    let earnedPoints = 0;
+    let totalMaxPoints = 0;
+    const hasCustomPoints = questions.some((q: any) => Number(q.points) > 0);
+
+    questions.forEach((q: any, idx: number) => {
       const correctOpt = q.correct_option !== undefined ? q.correct_option : q.correctOption;
       const qId = q.id || `fallback-${idx}`;
-      if (answers[qId] === correctOpt) correct++;
+      const qPoint = Number(q.points) > 0 ? Number(q.points) : 10;
+      totalMaxPoints += qPoint;
+
+      if (answers[qId] === correctOpt) {
+        correct++;
+        earnedPoints += qPoint;
+      }
     });
-    return Math.round((correct / questions.length) * 100) || 0;
+
+    const incorrect = Math.max(0, questions.length - correct);
+    let finalScore = 0;
+    if (hasCustomPoints && totalMaxPoints > 0) {
+      finalScore = Math.round((earnedPoints / totalMaxPoints) * 100);
+    } else {
+      finalScore = Math.round((correct / (questions.length || 1)) * 100);
+    }
+
+    return { score: finalScore, correct, incorrect };
   };
 
   const triggerSubmit = () => setShowConfirm(true);
@@ -712,8 +1335,8 @@ function AssessmentTaking({ session, dataService, showToast, onComplete }) {
     setShowConfirm(false);
     setIsSubmitting(true);
     try {
-      const score = calculateScore();
-      await dataService.submitAssessment(session.id, score);
+      const { score, correct, incorrect } = calculateResult();
+      await dataService.submitAssessment(session.id, score, correct, incorrect);
       onComplete();
     } catch (err) {
       console.error('Error submitting assessment to Supabase:', err);
@@ -871,7 +1494,7 @@ function TeacherDashboard({ dataService, showToast }) {
 
   const handleLogin = (e) => {
     e.preventDefault();
-    const correctPassword = "pakayat123"; 
+    const correctPassword = "sdisaiq123";
     if (passwordInput === correctPassword) {
       setIsAuthenticated(true);
       showToast('Berhasil masuk ke Portal Guru', 'success');
@@ -896,7 +1519,7 @@ function TeacherDashboard({ dataService, showToast }) {
                 type="password"
                 value={passwordInput}
                 onChange={(e) => setPasswordInput(e.target.value)}
-                placeholder="Kata Sandi (default: guru123)"
+                placeholder="Masukkan Kata Sandi Guru"
                 className="w-full p-4 border-2 border-slate-200 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 outline-none text-center font-bold text-slate-800 tracking-wider"
               />
             </div>
@@ -925,7 +1548,7 @@ function TeacherDashboard({ dataService, showToast }) {
             </div>
             <div>
               <h1 className="font-black text-lg sm:text-xl text-slate-800">Portal Guru</h1>
-              <p className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wider">PJOK SDI SAIQ AL-HIKMAH</p>
+              <p className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-wider">Tugas Online • SDI SAIQ AL-HIKMAH</p>
             </div>
           </div>
           <a href="#/" className="p-2 sm:px-4 sm:py-2.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 font-bold rounded-xl text-sm transition-all flex items-center group">
@@ -1003,80 +1626,7 @@ export default function App() {
   } else if (route.startsWith('#/guru')) {
     content = <TeacherDashboard dataService={dataService} showToast={showToast} />;
   } else {
-    content = (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6 font-sans selection:bg-emerald-200">
-        <div className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-10">
-          
-          <div className="bg-gradient-to-br from-emerald-500 to-teal-700 rounded-[2.5rem] p-8 sm:p-12 lg:p-14 text-white shadow-2xl shadow-emerald-600/20 flex flex-col justify-between relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-20 -mt-20 blur-2xl"></div>
-            <div className="absolute bottom-0 left-0 w-48 h-48 bg-teal-900 opacity-20 rounded-full -ml-10 -mb-10 blur-xl"></div>
-            
-            <div className="relative z-10">
-              <div className="w-24 h-24 bg-white rounded-[2rem] border border-white/20 flex items-center justify-center mb-8 shadow-inner overflow-hidden p-3">
-                <img 
-                  src="https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhOM1FPnzn7IZ30L1OWuHrJjULToj1O5yDB4ubW-rtL4Kw-kl7lrRyDuwWwhxRfuO-KItBHtwiAJ6fPA4XT7eQy0gRKu9chyphenhyphenCfFWaFgx9uK4jqZDXZVYpm1iSvyx3YrB4nBHohI8koE-bO4JRm-4W8jexQl5QmBdP0ciVr-nvwvyYI2iOnnMkDPQng7jPZS/s100/1000741465.png" 
-                  alt="Logo SDI SAIQ AL-HIKMAH" 
-                  className="w-full h-full object-contain"
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.src = 'https://placehold.co/100x100/10b981/ffffff?text=LOGO';
-                  }}
-                />
-              </div>
-              <h1 className="text-3xl lg:text-4xl font-black mb-4 leading-tight tracking-tight">
-                PJOK SDI SAIQ AL-HIKMAH
-              </h1>
-              <p className="text-emerald-50 text-base lg:text-lg leading-relaxed font-medium max-w-md">
-                PJOK SDI SAIQ AL-HIKMAH Platform tugas mandiri interaktif khusus mata pelajaran Pendidikan Jasmani, Olahraga, dan Kesehatan SDI SAIQ AL-HIKMAH.
-              </p>
-            </div>
-            
-            <div className="mt-10 lg:mt-16 relative z-10 flex flex-wrap gap-3 items-center justify-between">
-              <span className="bg-white/20 backdrop-blur-sm border border-white/20 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl flex items-center">
-                <Sparkles className="w-4 h-4 mr-1.5" /> Standar Nasional
-              </span>
-              <span className="text-emerald-100 text-xs sm:text-sm font-semibold tracking-wide">
-                Aplikasi ini dibuat oleh Pak Ayat
-              </span>
-            </div>
-          </div>
-          
-          <div className="space-y-5 lg:space-y-6 flex flex-col justify-center">
-            
-            <a href="#/siswa" className="group block bg-white p-6 sm:p-8 rounded-[2rem] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-slate-100 hover:border-emerald-200">
-              <div className="flex items-center">
-                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-emerald-50 text-emerald-600 rounded-[1.5rem] flex items-center justify-center mr-5 sm:mr-6 group-hover:bg-emerald-500 group-hover:text-white transition-all shadow-sm group-hover:shadow-emerald-500/40">
-                  <Users className="w-8 h-8 sm:w-10 sm:h-10" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-xl sm:text-2xl font-black text-slate-800 mb-1">Masuk Siswa</h3>
-                  <p className="text-slate-500 text-sm sm:text-base font-medium">Kerjakan ujian menggunakan token</p>
-                </div>
-                <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-emerald-50 transition-colors">
-                  <ChevronRight className="w-6 h-6 text-slate-300 group-hover:text-emerald-500 transition-colors" />
-                </div>
-              </div>
-            </a>
-            
-            <a href="#/guru" className="group block bg-white p-6 sm:p-8 rounded-[2rem] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-slate-100 hover:border-indigo-200">
-              <div className="flex items-center">
-                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-indigo-50 text-indigo-600 rounded-[1.5rem] flex items-center justify-center mr-5 sm:mr-6 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-sm group-hover:shadow-indigo-500/40">
-                  <ShieldCheck className="w-8 h-8 sm:w-10 sm:h-10" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-xl sm:text-2xl font-black text-slate-800 mb-1">Portal Guru</h3>
-                  <p className="text-slate-500 text-sm sm:text-base font-medium">Manajemen soal & pantau nilai</p>
-                </div>
-                <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-indigo-50 transition-colors">
-                  <ChevronRight className="w-6 h-6 text-slate-300 group-hover:text-indigo-600 transition-colors" />
-                </div>
-              </div>
-            </a>
-            
-          </div>
-        </div>
-      </div>
-    );
+    content = <LandingPage />;
   }
 
   return (
