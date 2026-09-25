@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 
 import { dataService } from './DataService';
-import { generateAssessmentPDF } from './utils/pdfGenerator';
+import { generateAssessmentPDF, getPDFSettings, savePDFSettings, DEFAULT_PDF_SETTINGS, type PDFSettings } from './utils/pdfGenerator';
 import type { StudentSubmissionDetail } from './types/database';
 import LandingPage from './components/LandingPage';
 
@@ -1104,6 +1104,430 @@ function TeacherResults({ dataService, showToast }) {
   );
 }
 
+function TeacherPDFSettings({ showToast }: { showToast: (msg: string, type?: string) => void }) {
+  const [settings, setSettings] = useState<PDFSettings>(getPDFSettings());
+  const [sampleLoading, setSampleLoading] = useState(false);
+
+  const handleChange = (field: keyof PDFSettings, value: any) => {
+    setSettings(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSave = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!settings.teacherName.trim()) {
+      return showToast('Nama guru pengampu tidak boleh kosong!', 'error');
+    }
+    savePDFSettings(settings);
+    showToast('Pengaturan PDF berhasil disimpan!', 'success');
+  };
+
+  const handleReset = () => {
+    setSettings(DEFAULT_PDF_SETTINGS);
+    savePDFSettings(DEFAULT_PDF_SETTINGS);
+    showToast('Pengaturan PDF dikembalikan ke default.', 'info');
+  };
+
+  const handleApplySubjectPreset = (subject: string) => {
+    if (subject === 'PJOK') {
+      setSettings(prev => ({
+        ...prev,
+        headerMode: 'custom',
+        customDocumentTitle: 'HASIL ASSESSMENT PJOK',
+        customHeaderNarrative: 'Pendidikan Jasmani, Olahraga, dan Kesehatan • Platform Tugas & Assessment Digital',
+        teacherRole: 'Guru Pengampu PJOK',
+        teacherNotes: 'Tingkatkan terus kebugaran jasmani, jaga pola hidup sehat, dan selalu berdoa sebelum berolahraga.'
+      }));
+    } else if (subject === 'Matematika') {
+      setSettings(prev => ({
+        ...prev,
+        headerMode: 'custom',
+        customDocumentTitle: 'HASIL ASSESSMENT MATEMATIKA',
+        customHeaderNarrative: 'Mata Pelajaran Matematika • Berhitung, Pola & Logika • Platform Tugas Online',
+        teacherRole: 'Guru Pengampu Matematika',
+        teacherNotes: 'Tingkatkan ketelitian dalam berhitung, pahami konsep dasar, dan perbanyak latihan mandiri.'
+      }));
+    } else if (subject === 'IPAS') {
+      setSettings(prev => ({
+        ...prev,
+        headerMode: 'custom',
+        customDocumentTitle: 'HASIL ASSESSMENT IPAS',
+        customHeaderNarrative: 'Ilmu Pengetahuan Alam & Sosial • Literasi Sains & Sosial • Platform Tugas Online',
+        teacherRole: 'Guru Pengampu IPAS',
+        teacherNotes: 'Terus tumbuhkan rasa ingin tahu terhadap alam sekitar dan kembangkan sikap peduli sosial.'
+      }));
+    } else if (subject === 'Bahasa Indonesia') {
+      setSettings(prev => ({
+        ...prev,
+        headerMode: 'custom',
+        customDocumentTitle: 'HASIL ASSESSMENT BAHASA INDONESIA',
+        customHeaderNarrative: 'Mata Pelajaran Bahasa Indonesia • Literasi, Membaca & Menulis • Platform Tugas Online',
+        teacherRole: 'Guru Pengampu Bahasa Indonesia',
+        teacherNotes: 'Tingkatkan minat membaca dan rajin berlatih menuangkan gagasan dalam bahasa yang baik dan santun.'
+      }));
+    } else if (subject === 'Pendidikan Pancasila') {
+      setSettings(prev => ({
+        ...prev,
+        headerMode: 'custom',
+        customDocumentTitle: 'HASIL ASSESSMENT PENDIDIKAN PANCASILA',
+        customHeaderNarrative: 'Pendidikan Pancasila & Nilai Karakter Kebangsaan • SDI SAIQ AL-HIKMAH',
+        teacherRole: 'Guru Pengampu Pendidikan Pancasila',
+        teacherNotes: 'Amalkan selalu nilai-nilai Pancasila, hormati guru dan orang tua, serta jaga kerukunan antarteman.'
+      }));
+    } else if (subject === 'Pendidikan Agama Islam') {
+      setSettings(prev => ({
+        ...prev,
+        headerMode: 'custom',
+        customDocumentTitle: 'HASIL ASSESSMENT PENDIDIKAN AGAMA ISLAM',
+        customHeaderNarrative: 'Pendidikan Agama Islam & Budi Pekerti • SDI SAIQ AL-HIKMAH',
+        teacherRole: 'Guru Pengampu Pendidikan Agama Islam',
+        teacherNotes: 'Jadikan ilmu sebagai penuntun ibadah, jaga salat lima waktu, dan terapkan akhlak mulia dalam keseharian.'
+      }));
+    } else {
+      // Umum / Otomatis
+      setSettings(prev => ({
+        ...prev,
+        headerMode: 'auto',
+        customDocumentTitle: 'HASIL TUGAS & ASSESSMENT ONLINE',
+        customHeaderNarrative: 'Platform Tugas & Assessment Digital • SDI SAIQ AL-HIKMAH',
+        teacherRole: 'Guru Pengampu',
+        teacherNotes: 'Tingkatkan terus semangat belajar, jaga kedisiplinan, dan terus kembangkan kemampuan diri.'
+      }));
+    }
+    showToast(`Preset mata pelajaran ${subject} diterapkan!`, 'info');
+  };
+
+  const handleTestDownloadPDF = () => {
+    setSampleLoading(true);
+    try {
+      const sampleDetail: StudentSubmissionDetail = {
+        session_id: 'sampel-demo-01',
+        student_name: 'Ahmad Raihan Pratama',
+        student_class: 'Kelas 4',
+        assessment_title: settings.headerMode === 'custom' && settings.customDocumentTitle 
+          ? settings.customDocumentTitle 
+          : 'Penilaian Sumatif ' + (settings.teacherRole.replace('Guru Pengampu ', '') || 'Mata Pelajaran'),
+        assessment_id: 999,
+        token: 'DEMO01',
+        score: 90,
+        total_questions: 10,
+        total_correct: 9,
+        total_incorrect: 1,
+        start_time: new Date().toISOString(),
+        end_time: new Date().toISOString(),
+        duration_text: '15 Menit',
+        date_formatted: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+        items: [
+          {
+            question_number: 1,
+            question_id: 1,
+            question_text: 'Contoh soal nomor satu untuk memeriksa tata letak pratinjau lembar hasil ujian...',
+            options: ['Pilihan Jawaban A', 'Pilihan Jawaban B', 'Pilihan Jawaban C', 'Pilihan Jawaban D'],
+            selected_option: 0,
+            selected_text: 'Pilihan Jawaban A',
+            correct_option: 0,
+            correct_text: 'Pilihan Jawaban A',
+            is_correct: true,
+            points: 10,
+            max_points: 10
+          },
+          {
+            question_number: 2,
+            question_id: 2,
+            question_text: 'Contoh butir pertanyaan kedua untuk mengevaluasi pemahaman konsep belajar...',
+            options: ['Pilihan Jawaban A', 'Pilihan Jawaban B', 'Pilihan Jawaban C', 'Pilihan Jawaban D'],
+            selected_option: 1,
+            selected_text: 'Pilihan Jawaban B',
+            correct_option: 1,
+            correct_text: 'Pilihan Jawaban B',
+            is_correct: true,
+            points: 10,
+            max_points: 10
+          }
+        ]
+      };
+
+      generateAssessmentPDF(sampleDetail, settings);
+      showToast('File Sampel PDF berhasil dibuat dan diunduh!', 'success');
+    } catch (err: any) {
+      showToast(err?.message || 'Gagal membuat sampel PDF', 'error');
+    } finally {
+      setSampleLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 pb-24 max-w-4xl mx-auto">
+      <form onSubmit={handleSave} className="space-y-6">
+        
+        {/* Banner Info */}
+        <div className="bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-700 p-6 sm:p-8 rounded-3xl text-white shadow-lg shadow-indigo-500/20">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-white/10 backdrop-blur-md rounded-2xl">
+              <Settings className="w-8 h-8 text-white" />
+            </div>
+            <div>
+              <h2 className="text-xl sm:text-2xl font-black">Pengaturan Hasil PDF</h2>
+              <p className="text-indigo-100 text-sm mt-1 leading-relaxed">
+                Sesuaikan kop surat, narasi keterangan mata pelajaran, identitas guru pengampu, serta catatan evaluasi guru yang akan tercetak otomatis pada lembar hasil assessment A4.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Section 1: Preset Cepat Mata Pelajaran */}
+        <div className="bg-white p-5 sm:p-7 rounded-3xl shadow-sm border border-slate-100 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base sm:text-lg font-bold text-slate-800 flex items-center">
+              <Sparkles className="w-5 h-5 mr-2 text-amber-500" />
+              Pilih Preset Cepat Mata Pelajaran
+            </h3>
+            <span className="text-xs text-slate-400 hidden sm:inline">Klik untuk mengisi kop & narasi otomatis</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            {[
+              { name: 'PJOK', icon: '🏃' },
+              { name: 'Matematika', icon: '📐' },
+              { name: 'IPAS', icon: '🔬' },
+              { name: 'Bahasa Indonesia', icon: '📖' },
+              { name: 'Pendidikan Pancasila', icon: '🏛️' },
+              { name: 'Pendidikan Agama Islam', icon: '🕌' },
+              { name: 'Umum / Otomatis', icon: '✨' }
+            ].map(item => (
+              <button
+                key={item.name}
+                type="button"
+                onClick={() => handleApplySubjectPreset(item.name === 'Umum / Otomatis' ? 'Umum' : item.name)}
+                className="p-3 rounded-2xl border border-slate-200 hover:border-indigo-400 bg-slate-50/70 hover:bg-indigo-50/50 text-slate-700 hover:text-indigo-800 transition-all text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95"
+              >
+                <span>{item.icon}</span>
+                <span className="truncate">{item.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Section 2: Kop & Keterangan Narasi Dokumen */}
+        <div className="bg-white p-5 sm:p-7 rounded-3xl shadow-sm border border-slate-100 space-y-5">
+          <div>
+            <h3 className="text-base sm:text-lg font-bold text-slate-800 flex items-center">
+              <FileText className="w-5 h-5 mr-2 text-indigo-600" />
+              Kop & Keterangan Dokumen PDF
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">Atur judul dokumen hasil tugas dan keterangan narasi di bawah kop sekolah.</p>
+          </div>
+
+          <div className="flex gap-4 p-1.5 bg-slate-100 rounded-2xl w-fit">
+            <button
+              type="button"
+              onClick={() => handleChange('headerMode', 'auto')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                settings.headerMode === 'auto' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Mode Otomatis (Ikuti Mapel Ujian)
+            </button>
+            <button
+              type="button"
+              onClick={() => handleChange('headerMode', 'custom')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                settings.headerMode === 'custom' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Mode Kustom (Teks Bebas Guru)
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Judul Dokumen Hasil {settings.headerMode === 'auto' && <span className="text-slate-400 font-normal">(Aktif saat mode kustom)</span>}
+              </label>
+              <input
+                type="text"
+                value={settings.customDocumentTitle}
+                onChange={(e) => handleChange('customDocumentTitle', e.target.value)}
+                placeholder="Contoh: HASIL ASSESSMENT PJOK / HASIL TUGAS MATEMATIKA"
+                className="w-full p-3.5 border border-slate-200 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-sm font-semibold text-slate-800 bg-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Keterangan Narasi Header {settings.headerMode === 'auto' && <span className="text-slate-400 font-normal">(Aktif saat mode kustom)</span>}
+              </label>
+              <input
+                type="text"
+                value={settings.customHeaderNarrative}
+                onChange={(e) => handleChange('customHeaderNarrative', e.target.value)}
+                placeholder="Contoh: Pendidikan Jasmani, Olahraga, dan Kesehatan • Platform Ujian Online Terpadu"
+                className="w-full p-3.5 border border-slate-200 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-sm font-medium text-slate-800 bg-white"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Section 3: Identitas Guru Pengampu */}
+        <div className="bg-white p-5 sm:p-7 rounded-3xl shadow-sm border border-slate-100 space-y-5">
+          <div>
+            <h3 className="text-base sm:text-lg font-bold text-slate-800 flex items-center">
+              <ShieldCheck className="w-5 h-5 mr-2 text-indigo-600" />
+              Identitas Guru Pengampu & Tanda Tangan
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">Informasi yang akan dicetak di kolom tanda tangan lembar PDF.</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">Nama Guru Pengampu *</label>
+              <input
+                type="text"
+                required
+                value={settings.teacherName}
+                onChange={(e) => handleChange('teacherName', e.target.value)}
+                placeholder="Contoh: Fahmi Ayatollah, S.Pd"
+                className="w-full p-3.5 border border-slate-200 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-sm font-bold text-slate-800 bg-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">Jabatan / Guru Mapel</label>
+              <input
+                type="text"
+                value={settings.teacherRole}
+                onChange={(e) => handleChange('teacherRole', e.target.value)}
+                placeholder="Contoh: Guru Pengampu PJOK / Guru Kelas 4"
+                className="w-full p-3.5 border border-slate-200 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-sm font-medium text-slate-800 bg-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">NIP / NUPTK (Opsional)</label>
+              <input
+                type="text"
+                value={settings.teacherNip}
+                onChange={(e) => handleChange('teacherNip', e.target.value)}
+                placeholder="Isi '-' jika belum ada NIP"
+                className="w-full p-3.5 border border-slate-200 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-sm font-medium text-slate-800 bg-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">Kota Titimangsa</label>
+              <input
+                type="text"
+                value={settings.cityName}
+                onChange={(e) => handleChange('cityName', e.target.value)}
+                placeholder="Contoh: Kepanjen / Malang"
+                className="w-full p-3.5 border border-slate-200 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-sm font-medium text-slate-800 bg-white"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Section 4: Catatan Guru & Evaluasi */}
+        <div className="bg-white p-5 sm:p-7 rounded-3xl shadow-sm border border-slate-100 space-y-5">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+            <div>
+              <h3 className="text-base sm:text-lg font-bold text-slate-800 flex items-center">
+                <BookOpen className="w-5 h-5 mr-2 text-indigo-600" />
+                Catatan Guru & Evaluasi Hasil Belajar
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">Pesan evaluasi guru yang akan dicetak di dalam kotak khusus lembar PDF.</p>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
+              <input
+                type="checkbox"
+                checked={settings.showNotesBox}
+                onChange={(e) => handleChange('showNotesBox', e.target.checked)}
+                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
+              />
+              Tampilkan Kotak Catatan di PDF
+            </label>
+          </div>
+
+          <div>
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <span className="text-xs font-bold text-slate-500">Pilih Template Catatan:</span>
+              {[
+                { label: 'Motivasi', text: 'Tingkatkan terus semangat belajar, jangan mudah menyerah, dan raih prestasi terbaikmu!' },
+                { label: 'Kebugaran', text: 'Tingkatkan terus kebugaran jasmani, jaga pola makan sehat, dan selalu rutin berolahraga.' },
+                { label: 'Kedisiplinan', text: 'Pertahankan kedisiplinan dan ketelitian dalam menyelesaikan setiap tugas pembelajaran.' },
+                { label: 'Remedial / Perlu Bimbingan', text: 'Perlu bimbingan dan latihan lebih giat pada materi yang belum dikuasai secara maksimal.' }
+              ].map(t => (
+                <button
+                  key={t.label}
+                  type="button"
+                  onClick={() => handleChange('teacherNotes', t.text)}
+                  className="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-bold transition-colors"
+                >
+                  + {t.label}
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              rows={3}
+              value={settings.teacherNotes}
+              onChange={(e) => handleChange('teacherNotes', e.target.value)}
+              placeholder="Ketik catatan evaluasi guru untuk siswa..."
+              className="w-full p-4 border border-slate-200 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-sm font-medium text-slate-800 bg-white leading-relaxed"
+            />
+          </div>
+
+          <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl flex items-center justify-between gap-3">
+            <div>
+              <span className="text-xs font-bold text-emerald-900 block">Apresiasi Otomatis Berdasarkan Nilai Siswa</span>
+              <span className="text-[11px] text-emerald-700/80">
+                Menyisipkan apresiasi/evaluasi otomatis pada PDF sesuai skor (≥85: Prestasi Istimewa, ≥70: Tuntas, &lt;70: Perlu Latihan).
+              </span>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.autoGradeFeedback}
+                onChange={(e) => handleChange('autoGradeFeedback', e.target.checked)}
+                className="w-5 h-5 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300"
+              />
+            </label>
+          </div>
+        </div>
+
+        {/* Footer Actions */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              type="submit"
+              className="flex-1 sm:flex-none px-7 py-3.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold rounded-2xl transition-all shadow-lg shadow-indigo-600/30 flex items-center justify-center text-sm"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              Simpan Pengaturan
+            </button>
+            <button
+              type="button"
+              onClick={handleReset}
+              className="px-4 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-2xl transition-colors text-sm"
+              title="Reset ke pengaturan bawaan"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleTestDownloadPDF}
+            disabled={sampleLoading}
+            className="w-full sm:w-auto px-6 py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold rounded-2xl transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center text-sm disabled:opacity-50"
+          >
+            {sampleLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FileDown className="w-4 h-4 mr-2" />}
+            Coba Unduh Sampel PDF
+          </button>
+        </div>
+
+      </form>
+    </div>
+  );
+}
+
 function StudentPortal({ dataService, showToast }) {
   const [tokenInput, setTokenInput] = useState('');
   const [studentName, setStudentName] = useState('');
@@ -1576,6 +2000,14 @@ function TeacherDashboard({ dataService, showToast }) {
           >
             <Award className="w-4 h-4 mr-2" /> Token & Nilai
           </button>
+          <button 
+            onClick={() => setActiveTab('pdf_settings')}
+            className={`flex-1 sm:flex-none px-6 py-3 rounded-xl font-bold text-sm flex justify-center items-center transition-all whitespace-nowrap ${
+              activeTab === 'pdf_settings' ? 'bg-white text-indigo-700 shadow-sm scale-100' : 'text-slate-500 hover:bg-white/40 hover:text-slate-700'
+            }`}
+          >
+            <Settings className="w-4 h-4 mr-2" /> Pengaturan PDF
+          </button>
         </div>
 
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -1584,6 +2016,9 @@ function TeacherDashboard({ dataService, showToast }) {
           )}
           {activeTab === 'results' && (
             <TeacherResults dataService={dataService} showToast={showToast} />
+          )}
+          {activeTab === 'pdf_settings' && (
+            <TeacherPDFSettings showToast={showToast} />
           )}
         </div>
       </main>

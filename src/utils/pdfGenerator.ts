@@ -2,11 +2,153 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { StudentSubmissionDetail } from '../types/database';
 
+export interface PDFSettings {
+  // Identitas Guru
+  teacherName: string;
+  teacherNip: string;
+  teacherRole: string;
+  cityName: string;
+
+  // Kop Surat & Narasi Dokumen
+  headerMode: 'auto' | 'custom';
+  customDocumentTitle: string;
+  customHeaderNarrative: string;
+
+  // Catatan Guru / Evaluasi
+  teacherNotes: string;
+  showNotesBox: boolean;
+  autoGradeFeedback: boolean;
+}
+
+export const DEFAULT_PDF_SETTINGS: PDFSettings = {
+  teacherName: "Fahmi Ayatollah, S.Pd",
+  teacherNip: "-",
+  teacherRole: "Guru Pengampu PJOK",
+  cityName: "Kepanjen",
+  headerMode: "auto",
+  customDocumentTitle: "HASIL TUGAS & ASSESSMENT ONLINE",
+  customHeaderNarrative: "Platform Tugas & Assessment Digital • SDI SAIQ AL-HIKMAH",
+  teacherNotes: "Tingkatkan terus semangat belajar, jaga kebugaran jasmani dan rohani, serta selalu disiplin dalam berlatih.",
+  showNotesBox: true,
+  autoGradeFeedback: true
+};
+
+export function getPDFSettings(): PDFSettings {
+  try {
+    const raw = localStorage.getItem('sdisaiq_pdf_settings');
+    if (raw) {
+      return { ...DEFAULT_PDF_SETTINGS, ...JSON.parse(raw) };
+    }
+  } catch (e) {
+    console.warn('Failed to parse pdf settings from localStorage', e);
+  }
+  return DEFAULT_PDF_SETTINGS;
+}
+
+export function savePDFSettings(settings: PDFSettings): void {
+  try {
+    localStorage.setItem('sdisaiq_pdf_settings', JSON.stringify(settings));
+  } catch (e) {
+    console.warn('Failed to save pdf settings to localStorage', e);
+  }
+}
+
+/**
+ * Resolves document header, narrative, and teacher role dynamically
+ * based on assessment title and user's settings.
+ */
+export function resolveSubjectAndHeader(assessmentTitle: string, settings: PDFSettings): {
+  documentTitle: string;
+  headerNarrative: string;
+  teacherRole: string;
+} {
+  if (settings.headerMode === 'custom' && settings.customDocumentTitle) {
+    return {
+      documentTitle: settings.customDocumentTitle,
+      headerNarrative: settings.customHeaderNarrative || "Platform Tugas & Assessment Digital • SDI SAIQ AL-HIKMAH",
+      teacherRole: settings.teacherRole || "Guru Pengampu"
+    };
+  }
+
+  // Automatic subject detection from assessment title
+  const t = (assessmentTitle || '').toLowerCase();
+  
+  if (t.includes('pjok') || t.includes('olahraga') || t.includes('penjas') || t.includes('gerak')) {
+    return {
+      documentTitle: 'HASIL ASSESSMENT PJOK',
+      headerNarrative: 'Pendidikan Jasmani, Olahraga, dan Kesehatan • Platform Tugas & Assessment Digital',
+      teacherRole: settings.teacherRole || 'Guru Pengampu PJOK'
+    };
+  }
+  if (t.includes('matematika') || t.includes('mtk') || t.includes('hitung')) {
+    return {
+      documentTitle: 'HASIL ASSESSMENT MATEMATIKA',
+      headerNarrative: 'Mata Pelajaran Matematika • Platform Tugas & Assessment Digital',
+      teacherRole: settings.teacherRole || 'Guru Pengampu Matematika'
+    };
+  }
+  if (t.includes('ipas') || t.includes('sains') || t.includes('ipa') || t.includes('ips')) {
+    return {
+      documentTitle: 'HASIL ASSESSMENT IPAS',
+      headerNarrative: 'Ilmu Pengetahuan Alam & Sosial • Platform Tugas & Assessment Digital',
+      teacherRole: settings.teacherRole || 'Guru Pengampu IPAS'
+    };
+  }
+  if (t.includes('indonesia') || t.includes('bahasa indonesia') || t.includes('b.indo')) {
+    return {
+      documentTitle: 'HASIL ASSESSMENT BAHASA INDONESIA',
+      headerNarrative: 'Mata Pelajaran Bahasa Indonesia • Literasi & Bahasa Terpadu',
+      teacherRole: settings.teacherRole || 'Guru Pengampu Bahasa Indonesia'
+    };
+  }
+  if (t.includes('pancasila') || t.includes('ppkn') || t.includes('kewarganegaraan')) {
+    return {
+      documentTitle: 'HASIL ASSESSMENT PENDIDIKAN PANCASILA',
+      headerNarrative: 'Pendidikan Pancasila & Karakter • Platform Tugas & Assessment Digital',
+      teacherRole: settings.teacherRole || 'Guru Pengampu Pendidikan Pancasila'
+    };
+  }
+  if (t.includes('agama') || t.includes('pai') || t.includes('islam')) {
+    return {
+      documentTitle: 'HASIL ASSESSMENT PENDIDIKAN AGAMA ISLAM',
+      headerNarrative: 'Pendidikan Agama Islam & Budi Pekerti • SDI SAIQ AL-HIKMAH',
+      teacherRole: settings.teacherRole || 'Guru Pengampu Pendidikan Agama'
+    };
+  }
+  if (t.includes('inggris') || t.includes('english')) {
+    return {
+      documentTitle: 'HASIL ASSESSMENT BAHASA INGGRIS',
+      headerNarrative: 'Mata Pelajaran Bahasa Inggris • Platform Tugas & Assessment Digital',
+      teacherRole: settings.teacherRole || 'Guru Pengampu Bahasa Inggris'
+    };
+  }
+  if (t.includes('seni') || t.includes('budaya') || t.includes('sbdp')) {
+    return {
+      documentTitle: 'HASIL ASSESSMENT SENI BUDAYA',
+      headerNarrative: 'Seni Budaya & Prakarya • Platform Tugas & Assessment Digital',
+      teacherRole: settings.teacherRole || 'Guru Pengampu Seni Budaya'
+    };
+  }
+
+  // General fallback
+  return {
+    documentTitle: 'HASIL ASSESSMENT & TUGAS ONLINE',
+    headerNarrative: 'Platform Tugas & Assessment Digital • SDI SAIQ AL-HIKMAH',
+    teacherRole: settings.teacherRole || 'Guru Pengampu'
+  };
+}
+
 /**
  * Generate and trigger download of assessment results in A4 PDF format
- * for SDI SAIQ AL-HIKMAH
+ * for SDI SAIQ AL-HIKMAH with dynamic settings and teacher notes
  */
-export function generateAssessmentPDF(detail: StudentSubmissionDetail): void {
+export function generateAssessmentPDF(
+  detail: StudentSubmissionDetail,
+  customSettings?: PDFSettings
+): void {
+  const settings = customSettings || getPDFSettings();
+  const resolvedInfo = resolveSubjectAndHeader(detail.assessment_title, settings);
+
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -21,20 +163,22 @@ export function generateAssessmentPDF(detail: StudentSubmissionDetail): void {
   // ----------------------------------------------------
   // 1. KOP SURAT / HEADER
   // ----------------------------------------------------
-  // Title
+  // Nama Sekolah
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   doc.setTextColor(15, 23, 42); // slate-900
   doc.text('SDI SAIQ AL-HIKMAH', pageWidth / 2, 16, { align: 'center' });
 
+  // Judul Dokumen Dinamis Sesuai Mapel / Setting
   doc.setFontSize(12);
   doc.setTextColor(5, 150, 105); // emerald-600
-  doc.text('HASIL ASSESSMENT PJOK', pageWidth / 2, 22, { align: 'center' });
+  doc.text(resolvedInfo.documentTitle, pageWidth / 2, 22, { align: 'center' });
 
+  // Keterangan Narasi Dokumen Sesuai Mapel / Setting
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(100, 116, 139); // slate-500
-  doc.text('Pendidikan Jasmani, Olahraga, dan Kesehatan • Platform Ujian Online Terpadu', pageWidth / 2, 27, { align: 'center' });
+  doc.text(resolvedInfo.headerNarrative, pageWidth / 2, 27, { align: 'center' });
 
   // Double accent lines
   doc.setDrawColor(5, 150, 105); // emerald-600
@@ -47,7 +191,7 @@ export function generateAssessmentPDF(detail: StudentSubmissionDetail): void {
   // ----------------------------------------------------
   // 2. DATA SISWA & RINGKASAN NILAI
   // ----------------------------------------------------
-  let startY = 36;
+  const startY = 36;
 
   // Box background for metadata
   doc.setFillColor(248, 250, 252); // slate-50
@@ -225,41 +369,99 @@ export function generateAssessmentPDF(detail: StudentSubmissionDetail): void {
   });
 
   // ----------------------------------------------------
-  // 4. SIGNATURE / FOOTER SECTION
+  // 4. CATATAN GURU & TANDA TANGAN
   // ----------------------------------------------------
-  const finalY = (doc as any).lastAutoTable?.finalY || 200;
-  
-  // Check if signature fits on current page, otherwise add a new page
-  if (finalY + 38 > pageHeight - 15) {
+  const tableBottomY = (doc as any).lastAutoTable?.finalY || 160;
+
+  // Space calculation
+  const notesHeight = settings.showNotesBox ? 22 : 0;
+  const signatureHeight = 36;
+  const totalNeeded = notesHeight + signatureHeight + 12;
+
+  // Add new page if remaining vertical space is insufficient
+  if (tableBottomY + totalNeeded > pageHeight - 14) {
     doc.addPage();
   }
 
-  const signY = (finalY + 38 > pageHeight - 15) ? 25 : finalY + 10;
-  const signX = pageWidth - margin - 55;
+  let currentY = (tableBottomY + totalNeeded > pageHeight - 14) ? 24 : tableBottomY + 5;
 
+  // 4A. Kotak Catatan Guru / Evaluasi
+  if (settings.showNotesBox) {
+    doc.setFillColor(248, 250, 252); // slate-50
+    doc.setDrawColor(203, 213, 225); // slate-300
+    doc.setLineWidth(0.3);
+    doc.roundedRect(margin, currentY, contentWidth, notesHeight, 2, 2, 'FD');
+
+    // Title Catatan Guru
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(5, 150, 105); // emerald-600
+    doc.text('CATATAN GURU / EVALUASI HASIL BELAJAR:', margin + 4, currentY + 5.5);
+
+    // Isi Catatan Guru + Smart Grade Feedback
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(30, 41, 59); // slate-800
+
+    let fullNote = settings.teacherNotes || 'Pertahankan semangat belajar dan terus tingkatkan pemahaman materi.';
+    if (settings.autoGradeFeedback) {
+      let gradeFeedback = '';
+      if (detail.score >= 85) {
+        gradeFeedback = ' • Apresiasi: Prestasi istimewa! Pemahaman materi sangat baik dan memuaskan.';
+      } else if (detail.score >= 70) {
+        gradeFeedback = ' • Evaluasi: Hasil baik dan tuntas. Terus pertahankan dan tingkatkan ketelitian belajar.';
+      } else {
+        gradeFeedback = ' • Evaluasi: Perlu lebih giat berlatih dan mengulang kembali materi yang belum dikuasai.';
+      }
+      fullNote += gradeFeedback;
+    }
+
+    const splitNote = doc.splitTextToSize(fullNote, contentWidth - 8);
+    doc.text(splitNote, margin + 4, currentY + 10.5);
+
+    currentY += notesHeight + 5;
+  } else {
+    currentY += 4;
+  }
+
+  // 4B. Tanda Tangan Guru Pengampu
+  const signX = pageWidth - margin - 58;
+  const signY = currentY + 2;
+
+  // Check if sign fits
+  if (signY + 30 > pageHeight - 12) {
+    doc.addPage();
+  }
+
+  const resolvedDate = detail.date_formatted || new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(71, 85, 105);
-  doc.text(`Kepanjen, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`, signX, signY);
-  doc.text('Guru Pengampu PJOK,', signX, signY + 5);
+  doc.text(`${settings.cityName || 'Kepanjen'}, ${resolvedDate}`, signX, signY);
+
+  const roleText = resolvedInfo.teacherRole.endsWith(',') ? resolvedInfo.teacherRole : `${resolvedInfo.teacherRole},`;
+  doc.text(roleText, signX, signY + 4.5);
 
   doc.setDrawColor(203, 213, 225);
-  doc.line(signX, signY + 24, signX + 48, signY + 24);
+  doc.line(signX, signY + 22, signX + 50, signY + 22);
 
   doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
   doc.setTextColor(15, 23, 42);
-  doc.text('Fahmi Ayatollah, S.Pd', signX, signY + 28);
+  doc.text(settings.teacherName || 'Fahmi Ayatollah, S.Pd', signX, signY + 26);
+
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(100, 116, 139);
-  doc.text('NIP / NUPTK. SDI SAIQ AL-HIKMAH', signX, signY + 32);
+  const nipLabel = settings.teacherNip && settings.teacherNip !== '-' ? `NIP/NUPTK. ${settings.teacherNip}` : 'SDI SAIQ AL-HIKMAH';
+  doc.text(nipLabel, signX, signY + 30);
 
   // ----------------------------------------------------
   // 5. DOWNLOAD PDF
   // ----------------------------------------------------
   const cleanStudentName = detail.student_name.replace(/[^a-zA-Z0-9_-]/g, '_');
   const cleanAssessment = detail.assessment_title.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const filename = `Hasil_PJOK_${cleanStudentName}_${cleanAssessment}.pdf`;
+  const filename = `Hasil_${cleanStudentName}_${cleanAssessment}.pdf`;
 
   doc.save(filename);
 }
